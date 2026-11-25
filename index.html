@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amigo Invisible</title>
+  <meta name="description" content="Sorteo de amigo invisible: cargá participantes, restricciones y repartí los resultados en secreto.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎁</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="snow" aria-hidden="true"></canvas>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+
+  <!-- ============ VISTA ORGANIZADOR ============ -->
+  <main id="organizer" class="wrap" hidden>
+    <header class="hero">
+      <span class="hero-badge">🎁 Sorteo secreto</span>
+      <h1>Amigo Invisible</h1>
+      <p class="lead">Cargá a la banda, marcá quién no puede regalarle a quién, sorteá y mandale a cada uno su resultado. Nadie ve el de los demás — ni vos.</p>
+    </header>
+
+    <!-- Paso 1 -->
+    <section class="card" id="step-event">
+      <div class="card-head"><span class="step">1</span><h2>El evento</h2></div>
+      <div class="grid-2">
+        <label class="field span-2">
+          <span>Nombre del evento</span>
+          <input id="ev-name" type="text" maxlength="60" placeholder="Navidad en lo de la Abuela">
+        </label>
+        <label class="field">
+          <span>Presupuesto</span>
+          <input id="ev-budget" type="text" maxlength="30" placeholder="$ 20.000">
+        </label>
+        <label class="field">
+          <span>Fecha del intercambio</span>
+          <input id="ev-date" type="date">
+        </label>
+        <label class="field span-2">
+          <span>Mensaje para todos <em>(opcional)</em></span>
+          <textarea id="ev-msg" rows="2" maxlength="240" placeholder="Nada de medias, eh. Traigan algo rico para picar."></textarea>
+        </label>
+      </div>
+    </section>
+
+    <!-- Paso 2 -->
+    <section class="card" id="step-people">
+      <div class="card-head"><span class="step">2</span><h2>Participantes</h2><span class="count" id="people-count">0</span></div>
+      <form id="add-person" class="add-row" autocomplete="off">
+        <input id="person-name" type="text" maxlength="40" placeholder="Nombre" aria-label="Nombre del participante" required>
+        <button class="btn btn-primary" type="submit">Agregar</button>
+      </form>
+      <p class="hint">Tip: podés pegar varios nombres separados por coma o por renglón.</p>
+      <ul id="people-list" class="people"></ul>
+      <p class="empty" id="people-empty">Todavía no hay nadie. Mínimo 3 para que tenga gracia.</p>
+    </section>
+
+    <!-- Paso 3 -->
+    <section class="card" id="step-rules">
+      <div class="card-head"><span class="step">3</span><h2>Restricciones</h2></div>
+      <p class="hint">Parejas, hermanos, o los que se regalan igual todo el año: marcalos para que no se toquen entre sí.</p>
+      <div class="add-row pair-row">
+        <select id="ex-a" aria-label="Primera persona"></select>
+        <span class="pair-x">✕</span>
+        <select id="ex-b" aria-label="Segunda persona"></select>
+        <button class="btn" id="add-ex" type="button">Sumar</button>
+      </div>
+      <ul id="ex-list" class="chips"></ul>
+      <label class="check">
+        <input type="checkbox" id="no-mutual">
+        <span>Evitar que dos se regalen mutuamente (A→B y B→A)</span>
+      </label>
+    </section>
+
+    <!-- Paso 4 -->
+    <section class="card" id="step-draw">
+      <div class="card-head"><span class="step">4</span><h2>Sorteo</h2></div>
+
+      <div id="pre-draw">
+        <p class="hint" id="draw-status"></p>
+        <button class="btn btn-primary btn-big" id="do-draw" type="button">🎲 Sortear</button>
+      </div>
+
+      <div id="post-draw" hidden>
+        <div class="success-banner">
+          <strong>¡Sorteo hecho!</strong>
+          <span id="draw-meta"></span>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" data-tab="links" aria-selected="true">📲 Mandar links</button>
+          <button class="tab" role="tab" data-tab="phone" aria-selected="false">🤳 Pasar el celu</button>
+        </div>
+
+        <div class="tab-panel" id="tab-links">
+          <p class="hint">Cada link muestra <strong>solo</strong> el resultado de esa persona. Mandáselo por privado.</p>
+          <p class="warn" id="file-warn" hidden>Ojo: estás abriendo la página como archivo local. Para que los links les funcionen a los demás, la página tiene que estar publicada (por ejemplo en GitHub Pages).</p>
+          <ul id="links-list" class="links"></ul>
+        </div>
+
+        <div class="tab-panel" id="tab-phone" hidden>
+          <p class="hint">Ideal si están todos juntos: cada uno toca su nombre, mira a escondidas y devuelve el celu.</p>
+          <div id="phone-grid" class="phone-grid"></div>
+        </div>
+
+        <div class="danger-zone">
+          <button class="btn btn-ghost" id="redo-draw" type="button">Volver a sortear</button>
+          <button class="btn btn-ghost" id="spoil" type="button">Ver todo (spoiler)</button>
+          <button class="btn btn-ghost danger" id="reset-all" type="button">Borrar todo</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">Todo queda guardado en este navegador. No se manda nada a ningún servidor.</footer>
+  </main>
+
+  <!-- ============ VISTA REVELACIÓN ============ -->
+  <main id="reveal" class="wrap reveal-wrap" hidden>
+    <div class="reveal-card">
+      <p class="reveal-event" id="rv-event"></p>
+      <h1 class="reveal-hi">Hola, <span id="rv-giver"></span> 👋</h1>
+      <p class="reveal-sub" id="rv-sub">Tocá el regalo para descubrir a quién le regalás.</p>
+
+      <button class="gift" id="gift" type="button" aria-label="Abrir el regalo">
+        <span class="gift-lid"></span>
+        <span class="gift-box"></span>
+        <span class="gift-ribbon"></span>
+      </button>
+
+      <div class="result" id="rv-result" hidden></div>
+    </div>
+    <p class="reveal-error" id="rv-error" hidden>Este link está roto o incompleto. Pedile al organizador que te lo mande de nuevo.</p>
+  </main>
+
+  <!-- ============ MODAL ============ -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 id="modal-title"></h3>
+      <div id="modal-body"></div>
+      <div class="modal-actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
