@@ -153,6 +153,31 @@ input:focus, textarea:focus, select:focus {
   .pair-row .btn { flex: 1 1 100%; }
 }
 
+/* ---------- Invite ---------- */
+.invite {
+  margin: 4px 0 12px; padding: 14px;
+  border: 1.5px dashed var(--gold); border-radius: 12px; background: #fffaf0;
+}
+.invite .hint { margin: 4px 0 10px; }
+.invite-title { margin: 0; font-weight: 700; }
+.invite-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.invite-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#invite-url { font-size: 14px; color: var(--muted); }
+.pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.pill.open { background: #e6f2ec; color: #174e3c; }
+.pill.closed { background: #f6e3e2; color: var(--red-2); }
+.warn .btn { margin-top: 8px; }
+.tag-remote { font-size: 11px; font-weight: 600; color: var(--green); margin-left: 6px; }
+
+/* ---------- Join ---------- */
+.join-card { text-align: left; }
+.join-card .reveal-event, .join-card .reveal-hi, .join-card .result-msg { text-align: center; }
+.join-form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.join-ok { margin: 0; background: #e6f2ec; border: 1px solid #bcdccd; color: #174e3c; padding: 10px 12px; border-radius: 10px; }
+.join-closed { text-align: center; font-weight: 600; color: var(--red-2); margin: 16px 0 0; }
+.join-list { margin-top: 20px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.join-list .result-label { margin: 0; font-size: 14px; }
+
 /* ---------- People ---------- */
 .people { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .person {

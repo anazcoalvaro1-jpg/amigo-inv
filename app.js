@@ -5,6 +5,28 @@
   const XOR_KEY = "amigo-invisible-shh";
   const $ = (s) => document.querySelector(s);
 
+  // Supabase (clave publicable: segura para el navegador; la base solo expone funciones controladas)
+  const SUPA_URL = "https://urphvuswmowcrqlveftj.supabase.co";
+  const SUPA_KEY = "sb_publishable_2UtXFQa3l0nm59-oBcywtg_iBYrtbGa";
+  const JOINED_KEY = "amigo-invisible:joined";
+
+  async function rpc(fn, args) {
+    let res;
+    try {
+      res = await fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: { apikey: SUPA_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(args),
+      });
+    } catch (_) {
+      throw new Error("No hay conexión. Probá de nuevo en un rato.");
+    }
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) throw new Error((data && data.message) || "Algo salió mal. Probá de nuevo.");
+    return data;
+  }
+
   // ---------------------------------------------------------------------------
   // Estado
   // ---------------------------------------------------------------------------
@@ -13,6 +35,7 @@
     people: [],          // [{ id, name, wish }]
     exclusions: [],      // [[idA, idB]]  (simétricas)
     noMutual: false,
+    invite: null,        // { code, token, open }
     draw: null,          // { assign: {giverId: recipientId}, at, sent: {id: true}, seen: {id: true} }
   });
 
@@ -212,7 +235,7 @@
       <li class="person" data-id="${p.id}">
         ${avatar(p.name)}
         <div class="person-main">
-          <div class="person-name">${esc(p.name)}</div>
+          <div class="person-name">${esc(p.name)}${p.rid ? '<span class="tag-remote">se anotó solo</span>' : ""}</div>
           <input class="person-wish" type="text" maxlength="80" value="${esc(p.wish || "")}"
                  placeholder="+ Pista de regalo (opcional)" aria-label="Pista de regalo para ${esc(p.name)}">
         </div>
@@ -222,6 +245,7 @@
     $("#people-empty").hidden = state.people.length > 0;
     renderRules();
     renderDraw();
+    renderInvite();
   }
 
   function renderRules() {
@@ -278,7 +302,7 @@
   function bindOrganizer() {
     // Evento
     [["#ev-name", "name"], ["#ev-budget", "budget"], ["#ev-date", "date"], ["#ev-msg", "msg"]].forEach(([sel, key]) => {
-      $(sel).addEventListener("input", (e) => { state.event[key] = e.target.value; save(); });
+      $(sel).addEventListener("input", (e) => { state.event[key] = e.target.value; save(); pushEvent(); });
     });
 
     // Agregar personas (soporta pegar varias)
@@ -314,6 +338,11 @@
       const id = e.target.closest("[data-del]")?.dataset.del;
       if (!id) return;
       if (!(await guardDraw())) return;
+      const gone = byId(id);
+      if (gone && gone.rid && state.invite) {
+        rpc("admin_remove", { p_code: state.invite.code, p_token: state.invite.token, p_participant: gone.rid })
+          .catch((err) => toast(err.message));
+      }
       state.people = state.people.filter((p) => p.id !== id);
       state.exclusions = state.exclusions.filter(([a, b]) => a !== id && b !== id);
       save(); renderPeople();
@@ -359,6 +388,7 @@
       }
       state.draw = { assign, at: Date.now(), sent: {}, seen: {} };
       save(); renderDraw();
+      if (state.invite && state.invite.open) setOpen(false, true);
       confetti();
       return true;
     };
@@ -370,7 +400,7 @@
     });
     $("#reset-all").addEventListener("click", async () => {
       if (await confirmBox("¿Borrar todo?", "Se borran el evento, los participantes, las restricciones y el sorteo.", "Borrar todo")) {
-        state = blank(); save(); renderEvent(); renderPeople();
+        state = blank(); save(); renderEvent(); renderPeople(); lateNames = [];
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     });
@@ -507,6 +537,208 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Invitación (organizador)
+  // ---------------------------------------------------------------------------
+  let lateNames = [];       // se anotaron después del sorteo
+  let pushTimer;
+
+  const inviteURL = () => `${location.href.split("#")[0]}#join=${state.invite.code}`;
+
+  function renderInvite() {
+    const inv = state.invite;
+    $("#invite-off").hidden = !!inv;
+    $("#invite-on").hidden = !inv;
+    if (!inv) return;
+    $("#invite-url").value = inviteURL();
+    const st = $("#invite-state");
+    st.textContent = inv.open ? "Abierta" : "Cerrada";
+    st.className = "pill " + (inv.open ? "open" : "closed");
+    $("#invite-toggle").textContent = inv.open ? "🔒 Cerrar inscripción" : "🔓 Reabrir";
+    const n = state.people.filter((p) => p.rid).length;
+    $("#invite-status").textContent = `${n} se anotaron por el link.` + (inv.synced ? ` Última actualización: ${new Date(inv.synced).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}.` : "");
+    const late = $("#invite-late");
+    late.hidden = !lateNames.length;
+    if (lateNames.length) {
+      late.innerHTML = `Se anotaron después del sorteo: <strong>${lateNames.map(esc).join(", ")}</strong>. Para sumarlos hay que volver a sortear.
+        <br><button class="btn btn-sm" id="late-add" type="button">Sumarlos (borra el sorteo)</button>`;
+      $("#late-add").onclick = async () => { if (await guardDraw()) syncInvite(); };
+    }
+  }
+
+  async function syncInvite(quiet) {
+    const inv = state.invite;
+    if (!inv) return;
+    let data;
+    try {
+      data = await rpc("admin_get", { p_code: inv.code, p_token: inv.token });
+    } catch (err) {
+      if (!quiet) toast(err.message);
+      return;
+    }
+    inv.open = data.open;
+    inv.synced = Date.now();
+    const added = [];
+    lateNames = [];
+    for (const r of data.participants) {
+      let p = state.people.find((x) => x.rid === r.id) ||
+              state.people.find((x) => !x.rid && x.name.toLowerCase() === r.name.toLowerCase());
+      if (p) {
+        p.rid = r.id;
+        if (r.wish !== p.rwish) { if (r.wish) p.wish = r.wish; p.rwish = r.wish; }
+      } else if (state.draw) {
+        lateNames.push(r.name);
+      } else {
+        state.people.push({ id: uid(), name: r.name, wish: r.wish, rid: r.id, rwish: r.wish });
+        added.push(r.name);
+      }
+    }
+    save(); renderPeople();
+    if (added.length) toast(`Se sumaron: ${added.join(", ")}`);
+    else if (!quiet) toast("Al día, no hay nadie nuevo.");
+  }
+
+  function pushEvent() {
+    if (!state.invite) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      const e = state.event;
+      rpc("admin_update_event", { p_code: state.invite.code, p_token: state.invite.token,
+        p_name: e.name, p_budget: e.budget, p_date: e.date, p_msg: e.msg, p_open: null }).catch(() => {});
+    }, 800);
+  }
+
+  async function setOpen(open, quiet) {
+    try {
+      await rpc("admin_update_event", { p_code: state.invite.code, p_token: state.invite.token,
+        p_name: null, p_budget: null, p_date: null, p_msg: null, p_open: open });
+      state.invite.open = open; save(); renderInvite();
+      if (!quiet) toast(open ? "Inscripción abierta" : "Inscripción cerrada");
+      else if (!open) toast("Cerré la inscripción porque ya sortearon.");
+    } catch (err) { toast(err.message); }
+  }
+
+  function bindInvite() {
+    $("#invite-create").addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true; btn.textContent = "Creando…";
+      try {
+        const e = state.event;
+        const r = await rpc("create_event", { p_name: e.name, p_budget: e.budget, p_date: e.date, p_msg: e.msg });
+        state.invite = { code: r.code, token: r.admin_token, open: true };
+        save(); renderInvite();
+        toast("¡Link creado! Mandalo al grupo.");
+      } catch (err) { toast(err.message); }
+      btn.disabled = false; btn.textContent = "Crear link de invitación";
+    });
+    const inviteText = () => {
+      const ev = state.event.name ? ` de *${state.event.name}*` : "";
+      return `🎁 ¡Sumate al Amigo Invisible${ev}!\nAnotate y dejá una pista de lo que te gusta:\n${inviteURL()}`;
+    };
+    $("#invite-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(inviteText()); toast("Invitación copiada"); }
+      catch (_) { prompt("Copiá la invitación:", inviteText()); }
+    });
+    $("#invite-wa").addEventListener("click", () => {
+      window.open(`https://wa.me/?text=${encodeURIComponent(inviteText())}`, "_blank", "noopener");
+    });
+    $("#invite-sync").addEventListener("click", () => syncInvite(false));
+    $("#invite-toggle").addEventListener("click", () => setOpen(!state.invite.open));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.invite && !$("#organizer").hidden) syncInvite(true);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inscripción (invitado)
+  // ---------------------------------------------------------------------------
+  function joinedStore() {
+    try { return JSON.parse(localStorage.getItem(JOINED_KEY)) || {}; } catch (_) { return {}; }
+  }
+  function saveJoined(all) {
+    try { localStorage.setItem(JOINED_KEY, JSON.stringify(all)); } catch (_) {}
+  }
+
+  async function showJoin(code) {
+    $("#organizer").hidden = true;
+    $("#join").hidden = false;
+    let ev;
+    try {
+      ev = await rpc("get_invite", { p_code: code });
+    } catch (err) {
+      ev = undefined;
+      $("#jn-title").textContent = "Uy…";
+      $("#jn-error").hidden = false;
+      $("#jn-error").textContent = err.message;
+      return;
+    }
+    if (!ev) {
+      document.querySelector(".join-card").hidden = true;
+      $("#jn-error").hidden = false;
+      $("#jn-error").textContent = "Esta invitación no existe o el link está incompleto. Pedile al organizador que te lo mande de nuevo.";
+      return;
+    }
+    document.title = `Amigo Invisible · ${ev.name || "Invitación"}`;
+    $("#jn-title").textContent = ev.name || "¡Te invitaron!";
+    const info = [];
+    if (ev.budget) info.push(`<div><dt>Presupuesto</dt><dd>${esc(ev.budget)}</dd></div>`);
+    if (ev.date) info.push(`<div><dt>Fecha</dt><dd>${esc(fmtDate(ev.date))}</dd></div>`);
+    $("#jn-info").innerHTML = info.join("");
+    if (ev.msg) { $("#jn-msg").hidden = false; $("#jn-msg").textContent = `“${ev.msg}”`; }
+
+    const renderNames = (names) => {
+      $("#jn-list-wrap").hidden = !names.length;
+      $("#jn-count").textContent = `Ya se anotaron (${names.length})`;
+      $("#jn-list").innerHTML = names.map((n) => `<li class="chip" style="padding-right:12px">${esc(n)}</li>`).join("");
+    };
+    renderNames(ev.names);
+
+    const all = joinedStore();
+    const showMe = (me) => {
+      $("#jn-form").hidden = true;
+      $("#jn-closed").hidden = true;
+      $("#jn-edit").hidden = false;
+      $("#jn-me").textContent = me.name;
+      $("#jn-mywish").value = me.wish || "";
+    };
+
+    if (all[code]) showMe(all[code]);
+    else if (!ev.open) $("#jn-closed").hidden = false;
+    else $("#jn-form").hidden = false;
+
+    $("#jn-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const name = $("#jn-name").value.trim();
+      const wish = $("#jn-wish").value.trim();
+      if (!name) return;
+      const btn = $("#jn-submit");
+      btn.disabled = true; btn.textContent = "Anotando…";
+      try {
+        const r = await rpc("join_event", { p_code: code, p_name: name, p_wish: wish });
+        all[code] = { id: r.id, token: r.edit_token, name: r.name, wish };
+        saveJoined(all);
+        showMe(all[code]);
+        ev.names.push(r.name); renderNames(ev.names);
+        confetti();
+        toast("¡Listo, estás adentro!");
+      } catch (err) {
+        toast(err.message);
+      }
+      btn.disabled = false; btn.textContent = "¡Me sumo! 🎁";
+    };
+
+    $("#jn-edit").onsubmit = async (e) => {
+      e.preventDefault();
+      const me = all[code];
+      const wish = $("#jn-mywish").value.trim();
+      try {
+        await rpc("update_wish", { p_code: code, p_participant: me.id, p_token: me.token, p_wish: wish });
+        me.wish = wish; saveJoined(all);
+        toast("Pista guardada 👌");
+      } catch (err) { toast(err.message); }
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Efectos: nieve + confeti
   // ---------------------------------------------------------------------------
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -572,15 +804,19 @@
   // Arranque
   // ---------------------------------------------------------------------------
   function route() {
+    const j = location.hash.match(/^#join=([a-z0-9]+)$/);
+    if (j) return showJoin(j[1]);
     const m = location.hash.match(/^#r=(.+)$/);
     if (m) return showReveal(m[1]);
     $("#reveal").hidden = true;
     $("#organizer").hidden = false;
     renderEvent();
     renderPeople();
+    if (state.invite) syncInvite(true);
   }
 
   bindOrganizer();
+  bindInvite();
   snow();
   route();
   addEventListener("hashchange", () => location.reload());

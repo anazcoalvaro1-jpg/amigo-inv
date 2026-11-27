@@ -54,6 +54,31 @@
         <button class="btn btn-primary" type="submit">Agregar</button>
       </form>
       <p class="hint">Tip: podés pegar varios nombres separados por coma o por renglón.</p>
+
+      <div class="invite" id="invite-box">
+        <div id="invite-off">
+          <p class="invite-title">🔗 ¿Que se anoten solos?</p>
+          <p class="hint">Creá un link de invitación: cada uno pone su nombre y una pista de lo que le gusta, y aparecen acá.</p>
+          <button class="btn btn-primary" id="invite-create" type="button">Crear link de invitación</button>
+        </div>
+        <div id="invite-on" hidden>
+          <div class="invite-head">
+            <p class="invite-title">🔗 Link de invitación</p>
+            <span class="pill" id="invite-state"></span>
+          </div>
+          <div class="add-row">
+            <input id="invite-url" type="text" readonly aria-label="Link de invitación">
+          </div>
+          <div class="invite-actions">
+            <button class="btn btn-sm" id="invite-copy" type="button">Copiar</button>
+            <button class="btn btn-sm btn-wa" id="invite-wa" type="button">WhatsApp</button>
+            <button class="btn btn-sm" id="invite-sync" type="button">🔄 Actualizar</button>
+            <button class="btn btn-sm btn-ghost" id="invite-toggle" type="button"></button>
+          </div>
+          <p class="hint" id="invite-status"></p>
+          <div class="warn" id="invite-late" hidden></div>
+        </div>
+      </div>
       <ul id="people-list" class="people"></ul>
       <p class="empty" id="people-empty">Todavía no hay nadie. Mínimo 3 para que tenga gracia.</p>
     </section>
@@ -133,6 +158,46 @@
       <div class="result" id="rv-result" hidden></div>
     </div>
     <p class="reveal-error" id="rv-error" hidden>Este link está roto o incompleto. Pedile al organizador que te lo mande de nuevo.</p>
+  </main>
+
+  <!-- ============ VISTA INSCRIPCIÓN ============ -->
+  <main id="join" class="wrap reveal-wrap" hidden>
+    <div class="reveal-card join-card">
+      <p class="reveal-event">Amigo Invisible</p>
+      <h1 class="reveal-hi" id="jn-title">Cargando…</h1>
+      <dl class="result-info" id="jn-info"></dl>
+      <p class="result-msg" id="jn-msg" hidden></p>
+
+      <form id="jn-form" class="join-form" autocomplete="off" hidden>
+        <label class="field">
+          <span>Tu nombre</span>
+          <input id="jn-name" type="text" maxlength="40" placeholder="Como te conocen todos" required>
+        </label>
+        <label class="field">
+          <span>Pista de regalo <em>(opcional)</em></span>
+          <textarea id="jn-wish" rows="2" maxlength="120" placeholder="Me gustan los libros de misterio, el mate y las plantas"></textarea>
+        </label>
+        <button class="btn btn-primary btn-big" type="submit" id="jn-submit">¡Me sumo! 🎁</button>
+      </form>
+
+      <form id="jn-edit" class="join-form" autocomplete="off" hidden>
+        <p class="join-ok">✅ Ya estás anotado/a como <strong id="jn-me"></strong>.</p>
+        <label class="field">
+          <span>Tu pista de regalo</span>
+          <textarea id="jn-mywish" rows="2" maxlength="120" placeholder="Algo que te guste…"></textarea>
+        </label>
+        <button class="btn" type="submit">Guardar pista</button>
+        <p class="hint">Cuando se haga el sorteo, el organizador te va a mandar tu link secreto.</p>
+      </form>
+
+      <p class="join-closed" id="jn-closed" hidden>🔒 Las inscripciones ya están cerradas.</p>
+
+      <div class="join-list" id="jn-list-wrap" hidden>
+        <p class="result-label" id="jn-count"></p>
+        <ul class="chips" id="jn-list"></ul>
+      </div>
+    </div>
+    <p class="reveal-error" id="jn-error" hidden></p>
   </main>
 
   <!-- ============ MODAL ============ -->
